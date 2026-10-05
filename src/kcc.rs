@@ -517,7 +517,26 @@ fn step_move(
     }
 
     // try to slide from upstairs
+    //
+    // A character blocked by a riser rests `skin_width` short of it and, with its velocity
+    // zeroed every tick, only regains a few mm of speed per tick. This trial move can then
+    // travel less than `skin_width`, which is too little for the down-cast below to reach the
+    // next tread, so the step is refused forever (stairs only climb on momentum). Make the
+    // trial move travel at least `2 * skin_width`, then restore the velocity. Unreal's
+    // `UCharacterMovementComponent::StepUp` avoids this with an edge tolerance far below one
+    // tick of travel.
+    let min_probe = 2.0 * ctx.cfg.move_and_slide.skin_width;
+    let travel = ctx.velocity.xz().length() * time.delta_secs();
+    let probe_scale = if travel > 1.0e-6 && travel < min_probe {
+        min_probe / travel
+    } else {
+        1.0
+    };
+    ctx.velocity.x *= probe_scale;
+    ctx.velocity.z *= probe_scale;
     move_character(time, move_and_slide, ctx, transform);
+    ctx.velocity.x /= probe_scale;
+    ctx.velocity.z /= probe_scale;
 
     let cast_dir = Dir3::NEG_Y;
     let hit = cast_move(cast_dir * cast_len, move_and_slide, ctx, transform);
